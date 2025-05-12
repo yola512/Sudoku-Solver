@@ -14,7 +14,7 @@ int calculateEnergy(int **board) {
     }
     for (int num = 1; num <= 9; num++) {
       if (count[num] > 1) {
-        conflicts++;
+        conflicts += count[num] - 1;
       }
     }
   }
@@ -29,41 +29,12 @@ int calculateEnergy(int **board) {
     }
     for (int num = 1; num <= 9; num++) {
       if (count[num] > 1) {
-        conflicts++;
+        conflicts += count[num] - 1;
       }
     }
   }
 
-  // number of conflicts in 3x3 boxes (how many times there is a number duplicate)
-  for (int boxRow = 0; boxRow < 3; boxRow++) {
-    for (int boxCol = 0; boxCol < 3; boxCol++) {
-      // matrix to store how many times digits from 1-9 appeared in a row
-      int count[10] = {0};
-      // loop for moving inside a box
-      for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-          // [boxRow * 3 + i][boxCol * 3 + j] - actual row and column indexes on the Sudoku board
-          // e.g. boxRow = 1, boxCol = 2 -> box on the right, middle row
-          // val - value inside the cell
-          int val = board[boxRow * 3 + i][boxCol * 3 + j];
-          count[val]++;
-        }
-      }
-      for (int num = 1; num <= 9; num++) {
-        if (count[num] > 1) {
-          conflicts += count[num] - 1;
-        }
-      }
-    }
-  }
   return conflicts;
-}
-
-// auxiliary function for swapping two values
-void swap(int *a, int *b) {
-  int temp = *a;
-  *a = *b;
-  *b = temp;
 }
 
 int generateNeighbour(GameState *neighbour_state, const GameState *current_state, int row, int col) {
@@ -71,7 +42,6 @@ int generateNeighbour(GameState *neighbour_state, const GameState *current_state
    for (int i = 0; i < 9; i++) {
      for (int j = 0; j < 9; j++) {
        neighbour_state -> solution[i][j] = current_state-> solution[i][j];
-       neighbour_state -> frozen[i][j] += current_state-> frozen[i][j];
      }
    }
    neighbour_state -> energy = current_state -> energy;
@@ -94,109 +64,114 @@ int generateNeighbour(GameState *neighbour_state, const GameState *current_state
      c2 = boxCol * 3 + rand() % 3;
 
      // ensure positions are different and not frozen
-     if ((r1 != r2) || (c1 != c2) &&
-         !neighbour_state->frozen[r1][c1] &&
-         !neighbour_state->frozen[r2][c2])
-     {
-         // swap two values
-         swap(&neighbour_state->solution[r1][c1], &neighbour_state->solution[r2][c2]);
-         return 1; // neighbour is taken into account (valid neighbour was generated)
+     if ((r1 != r2 || c1 != c2) && !neighbour_state->frozen[r1][c1] && !neighbour_state->frozen[r2][c2]) {
+       // swap two values
+       swap(&neighbour_state->solution[r1][c1], &neighbour_state->solution[r2][c2]);
+       return 1;  // neighbour is taken into account (valid neighbour was generated)
      }
   }
   return 0; // FAILED to generate a valid neighbour (not taken into account)
 }
 
-// main function SA for solving sudoku
+// main SA function
 void solve_sudoku_sa(Game *game, double T_start, double T_end, double alpha) {
-  srand(time(NULL));
+    srand(time(NULL));
 
-  // allocate, initialize GameStates
-  GameState current_state, neighbour_state, best_state;
+    // allocating memory
+    int **current = allocateBoard();
+    int **best = allocateBoard();
+    int **neighbor = allocateBoard();
 
-  current_state.solution = allocateBoard();
-  neighbour_state.solution = allocateBoard();
-  best_state.solution = allocateBoard();
+    // initializing
+    copyBoard(game->board, current);
+    fill_board_with_nums(current);
+    copyBoard(current, best);
 
-  current_state.frozen = allocateBoard();
-  neighbour_state.frozen = allocateBoard();
-  best_state.frozen = allocateBoard();
+    int current_energy = calculateEnergy(current);
+    int best_energy = current_energy;
 
-  if (!current_state.solution || !neighbour_state.solution || !best_state.solution
-      || !current_state.frozen || !neighbour_state.frozen || !best_state.frozen)
-  {
-      perror("Failed to allocate memory for GameStates");
-      // free whatever has been allocated successfully
-      free(current_state.solution);
-      free(neighbour_state.solution);
-      free(best_state.solution);
-      free(current_state.frozen);
-      free(neighbour_state.frozen);
-      free(best_state.frozen);
-      return;
-  }
+    double T = T_start;
+    int iteration = 0;
+    const int max_iterations = 1000000;
 
-  // initialize energy
-  current_state.energy = calculateEnergy(current_state.solution);
-  best_state.energy = current_state.energy;
+    int last_improvement = 0;
+    int frozen[9][9] = {0};
 
-  // copy current state to best_state
-  copyBoard(best_state.solution, current_state.solution);
-  copyBoard(best_state.frozen, current_state.frozen);
-  best_state.energy = current_state.energy;
-
-  double T = T_start;
-
-  while (T > T_end && current_state.energy > 0) {
-    // generate neighbour by swapping two non-frozen values in a random block
-    int valid = generateNeighbour(&neighbour_state, &current_state, 0, 0);
-    if (!valid) continue; // skip if failed to generate valid neighbour
-
-    // calculating neighbour's + energy difference
-    neighbour_state.energy = calculateEnergy(neighbour_state.solution);
-    double deltaE = neighbour_state.energy - current_state.energy;
-
-    // acceptance decision
-    if (deltaE < 0) {
-      // neighbour's solution is better (lower energy) -> always accept
-      copyBoard(current_state.solution, neighbour_state.solution);
-      copyBoard(current_state.frozen, neighbour_state.frozen);
-      current_state.energy = neighbour_state.energy;
-    }
-    else {
-      // neighbour's solution is worse or the same -> accept with exp(-deltaE/T) probability
-      double probability = exp(-deltaE / T);
-      if ((double)rand() / RAND_MAX < probability) {
-        copyBoard(current_state.solution, neighbour_state.solution);
-        copyBoard(current_state.frozen, neighbour_state.frozen);
-        current_state.energy = neighbour_state.energy;
-      }
-      // if not accepted -> current_state stays the same
+    // mark frozen cells (original numbers)
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            frozen[i][j] = (game->board[i][j] != 0);
+        }
     }
 
-    // refresh best found solution (best_state)
-    if (current_state.energy < best_state.energy) {
-      copyBoard(best_state.solution, current_state.solution);
-      copyBoard(best_state.frozen, current_state.frozen);
-      best_state.energy = current_state.energy;
+    while (T > T_end && iteration < max_iterations && best_energy > 0) {
+        iteration++;
+
+        // generate neighbor by swapping two non-frozen cells in a random 3x3 block
+        copyBoard(current, neighbor);
+
+        int block_row = rand() % 3;
+        int block_col = rand() % 3;
+        int candidates[9][2];
+        int count = 0;
+
+        // find swappable cells in this block
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                int r = block_row*3 + i;
+                int c = block_col*3 + j;
+                if (!frozen[r][c]) {
+                    candidates[count][0] = r;
+                    candidates[count][1] = c;
+                    count++;
+                }
+            }
+        }
+
+        // perform swap if possible
+        if (count >= 2) {
+            int a = rand() % count;
+            int b;
+            do { b = rand() % count; } while (b == a);
+
+            swap(&neighbor[candidates[a][0]][candidates[a][1]],
+                 &neighbor[candidates[b][0]][candidates[b][1]]);
+        }
+
+        int neighbor_energy = calculateEnergy(neighbor);
+        int delta = neighbor_energy - current_energy;
+
+        // acceptance decision
+        if (delta < 0 || (T > 0 && (double)rand()/RAND_MAX < exp(-delta/T))) {
+            copyBoard(neighbor, current);
+            current_energy = neighbor_energy;
+
+            if (current_energy < best_energy) {
+                copyBoard(current, best);
+                best_energy = current_energy;
+                last_improvement = iteration;
+               // printf("Iteration: %d, Energy: %d, T: %.2f\n", iteration, best_energy, T);
+            }
+        }
+
+        // cooling
+        T *= alpha;
     }
 
-    // copy the best state to the game board
-    copyBoard(game-> board, best_state.solution);
+    // copy best solution back (preserving original numbers)
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            if (!frozen[i][j]) {
+                game->board[i][j] = best[i][j];
+            }
+        }
+    }
 
-    // cooling
-    T *= alpha;
-  }
-  // print final result
-  printf("\nFinished.\n");
-  printf("Best State Found: Energy=%.2f\n", best_state.energy);
-  printf("Solution:\n");
-  printBoard(game);
+    printf("\nFINAL COST: %d\n", best_energy);
+    //printf("Iterations: %d\n", iteration);
 
-  // free allocated memory
-  free(current_state.solution);
-  free(neighbour_state.solution);
-  free(best_state.solution);
-  free(current_state.frozen);
-  free(neighbour_state.frozen);
-  free(best_state.frozen);
+    // freeing memory
+    free(current);
+    free(best);
+    free(neighbor);
 }

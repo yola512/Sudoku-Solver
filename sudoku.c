@@ -39,8 +39,8 @@ bool unUsedInBox(int **board, int i, int j, int number) {
 // final check if the number isn't used in row, column or box
 // (meaning if it's safe to put the number in choosen cell)
 bool finalCheck(int **board, int i, int j, int number) {
-  return (unUsedInRow(board, i, number) && (unUsedInColumn(board, i, number))
-          && (unUsedInBox(board, i, j, number)));
+  return (unUsedInRow(board, i, number) && (unUsedInColumn(board, j, number))
+          && (unUsedInBox(board, i - i % 3, j - j % 3, number)));
 }
 
 // GENERATING SUDOKU + FILLING THE BOARD
@@ -158,10 +158,11 @@ int **generateSudoku(Difficulty difficulty, Game *game) {
   // 2. fill remaining boxes on the board
   if (!fillRemaining(board, 0, 0)) {
     freeGame(game);
-    return NULL;
+    return generateSudoku(difficulty, game); // retrying if fails to fill the remaining
   }
 
-  // 4. remove x random digits
+  // 3. remove x random digits
+
   removeXDigits(board, x);
 
   return board;

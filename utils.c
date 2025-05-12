@@ -7,10 +7,7 @@ Game *createNewGame(Difficulty difficulty) {
         printf("Memory allocation failed for Game.\n");
         return NULL;
     }
-
-    game->difficulty = difficulty;
-    game->board = NULL;
-
+    game->board = NULL;  // will be set by generateSudoku
     return game;
 }
 
@@ -46,7 +43,6 @@ void freeGame(Game *game) {
         free(game->board[i]);
     }
     free(game->board);
-
     // free 'game' struct itself
     free(game);
 }
@@ -107,6 +103,69 @@ void copyBoard(int **source, int **destination) {
     for (int i = 0; i < 9; i++) {
         for (int j = 0; j < 9; j++) {
             destination[i][j] = source[i][j];
+        }
+    }
+}
+
+// auxiliary function for swapping two values
+void swap(int *a, int *b) {
+  int temp = *a;
+  *a = *b;
+  *b = temp;
+}
+
+//
+void fill_board_with_nums(int **board)
+{
+    int box = 3;
+
+    // iterating through each box
+    for (int boxRow = 0; boxRow < box; boxRow++)
+    {
+        for (int boxCol = 0; boxCol < box; boxCol++)
+        {
+            int start_row = boxRow * box;
+            int start_col = boxCol * box;
+
+            bool used[10] = {false}; // numbers 1-9
+            int missing_nums[100];
+            int missing_count = 0;
+
+            // mark numbers that have been used in current box
+            for (int i = 0; i < box; i++)
+            {
+                for (int j = 0; j < box; j++)
+                {
+                    int val = board[start_row + i][start_col + j];
+                    if (val >= 1 && val <= 9)
+                        used[val] = true;
+                }
+            }
+
+            // collect missing numbers
+            for (int num = 1; num <= 9; num++)
+            {
+                if (!used[num])
+                    missing_nums[missing_count++] = num;
+            }
+
+            // swap numbers (randomize order)
+            for (int i = 0; i < missing_count; i++) {
+                int j = rand() % missing_count; // random index
+                swap(&missing_nums[i], &missing_nums[j]); // swap with random element
+            }
+
+            // fill empty cells (value 0) with shuffled missing numbers
+            int index = 0;
+            for (int i = 0; i < box; i++) {
+                for (int j = 0; j < box; j++) {
+                    int r = start_row + i;
+                    int c = start_col + j;
+                    if (board[r][c] == 0 && index < missing_count) {
+                        board[r][c] = missing_nums[index++];
+                    }
+                }
+            }
         }
     }
 }

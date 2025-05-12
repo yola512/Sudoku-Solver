@@ -1,7 +1,6 @@
 #ifndef SUDOKU_H
 #define SUDOKU_H
 
-#include "stdbool.h"
 #include "utils.h"
 #include "string.h"
 
